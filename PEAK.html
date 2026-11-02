@@ -98,6 +98,7 @@ tr:last-child>th,tr:last-child>td{border-bottom:0}
 thead th{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-block:10px;background:var(--surface)}
 thead th .who{display:block;font-family:var(--display);font-size:19px;letter-spacing:.03em;color:var(--ink)}
 thead th .prog{display:block;font-weight:500;letter-spacing:0;text-transform:none;font-variant-numeric:tabular-nums}
+.time .mt{display:block;font-size:11.5px;font-weight:500;color:var(--muted);letter-spacing:0}
 .time{position:sticky;left:0;z-index:1;background:var(--surface);text-align:left;white-space:nowrap;font-weight:600;font-size:14px;font-variant-numeric:tabular-nums;border-right:1px solid var(--line);min-width:118px}
 tbody tr.slot:nth-of-type(even) td, tbody tr.slot:nth-of-type(even) th.time{background:var(--row-alt)}
 tbody tr.slot.works td, tbody tr.slot.works th.time{background:var(--works)}
@@ -156,7 +157,7 @@ footer.wrap{padding-block:0 32px;color:var(--muted);font-size:12.5px}
     <div class="mast-text">
       <div class="eyebrow">University of Idaho · PEAK Toolkit</div>
       <h1>Monthly Meeting Availability</h1>
-      <p class="lede">Monthly check-ins with NACUBO and WICHE staff, now through August 2027. Mark each slot for yourself; Ben will submit the team's answer. <strong>WICHE form due Friday, November 6.</strong> All times Mountain.</p>
+      <p class="lede">Monthly check-ins with NACUBO and WICHE staff, now through August 2027. Mark each slot for yourself; Ben will submit the team's answer. <strong>WICHE form due Friday, November 6.</strong> All times Pacific (WICHE lists them in Mountain, one hour later).</p>
     </div>
     <div class="status" id="status" data-s="wait" role="status"><span class="dot"></span><span id="statusText">Connecting…</span></div>
   </div>
@@ -228,7 +229,8 @@ footer.wrap{padding-block:0 32px;color:var(--muted);font-size:12.5px}
   const h12=h=>((h+11)%12)+1, ap=h=>h<12?"am":"pm";
   const timeLabel=h=>ap(h)===ap(h+1)?`${h12(h)}–${h12(h+1)} ${ap(h)}`:`${h12(h)} ${ap(h)}–${h12(h+1)} ${ap(h+1)}`;
   const SLOTS=[];
-  DAYS.forEach(d=>d.hours.forEach(h=>SLOTS.push({id:`${d.id}_${String(h).padStart(2,"0")}`,day:d,h,label:timeLabel(h)})));
+  // Hours are WICHE's Mountain times (slot ids use them); labels show Pacific, one hour earlier.
+  DAYS.forEach(d=>d.hours.forEach(h=>SLOTS.push({id:`${d.id}_${String(h).padStart(2,"0")}`,day:d,h,label:timeLabel(h-1),mt:timeLabel(h)})));
 
   const DB=(DATABASE_URL||"").trim().replace(/\/+$/,"");
   let tree={};            // raw copy of /peak from the database
@@ -246,7 +248,7 @@ footer.wrap{padding-block:0 32px;color:var(--muted);font-size:12.5px}
   function build(){
     const t=$("#avail");
     t.appendChild(el("thead",{},[el("tr",{},[
-      el("th",{class:"time",scope:"col",text:"Time (MT)"}),
+      el("th",{class:"time",scope:"col",text:"Time (PT)"}),
       ...PEOPLE.map(p=>el("th",{scope:"col"},[el("span",{class:"who",text:p.name}),el("span",{class:"prog","data-prog":p.id,text:"0 of "+SLOTS.length})])),
       el("th",{scope:"col",text:"Team"})
     ])]));
@@ -260,7 +262,7 @@ footer.wrap{padding-block:0 32px;color:var(--muted);font-size:12.5px}
       d.hours.forEach(h=>{
         const sid=`${d.id}_${String(h).padStart(2,"0")}`;
         body.appendChild(el("tr",{class:"slot","data-row":sid},[
-          el("th",{class:"time",scope:"row",text:timeLabel(h)}),
+          el("th",{class:"time",scope:"row"},[document.createTextNode(timeLabel(h-1)),el("span",{class:"mt",text:timeLabel(h)+" MT"})]),
           ...PEOPLE.map(p=>el("td",{},[el("button",{class:"chip s-none",type:"button","data-cell":p.id+"|"+sid,text:"·"})])),
           el("td",{},[el("div",{class:"team"},[el("span",{class:"pips","data-pips":sid}),el("span",{class:"verdict waiting","data-verdict":sid,text:"Waiting"})])])
         ]));
@@ -381,7 +383,7 @@ footer.wrap{padding-block:0 32px;color:var(--muted);font-size:12.5px}
       const parts=[];if(t.yes)parts.push(`${t.yes} Yes`);if(t.inb)parts.push(`${t.inb} If need be`);
       grid.appendChild(el("div",{class:"fit"+(works?" works":"")},[
         el("span",{class:"tag"+(works?"":" partial"),text:works?"Works for all":`${t.answered} of ${PEOPLE.length} answered`}),
-        el("div",{class:"when"},[document.createTextNode(s.day.name),el("span",{text:s.label+" MT"})]),
+        el("div",{class:"when"},[document.createTextNode(s.day.name),el("span",{text:s.label+" PT"})]),
         el("div",{class:"meta",text:parts.join(" · ")})
       ]));
     });
