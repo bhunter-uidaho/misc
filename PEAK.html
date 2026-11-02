@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PEAK Meeting Availability</title>
+<!--
+  ONE-TIME SETUP (about 3 minutes)
+  GitHub Pages only serves files, so responses are saved to a free Firebase Realtime Database.
+
+  1. Go to https://console.firebase.google.com and create a project (any name; Google Analytics can be off).
+  2. Open Realtime Database from the left menu, click Create Database, pick a location,
+     and choose "Start in test mode".
+  3. Copy the database URL shown at the top of the Data tab
+     (it looks like https://your-project-default-rtdb.firebaseio.com).
+  4. Paste it into DATABASE_URL below, commit this file to your repo as index.html,
+     and turn on GitHub Pages (Settings > Pages > Deploy from a branch).
+
+  Test mode leaves the database open to anyone with the URL for 30 days, which covers the November 6 deadline.
+-->
+<script>
+  const DATABASE_URL = "https://console.firebase.google.com/project/peakschedule/database/peakschedule-default-rtdb/data/~2F"; // e.g. "https://peak-availability-default-rtdb.firebaseio.com"
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: black masthead with a Pride Gold rule; a "best fits" strip; one wide availability grid with a sticky time column; then week-of-month and notes. */
+:root{
+  --bg:#F2F2EF; --surface:#FFFFFF; --ink:#191919; --muted:#5B5B56; --line:#D8D8D2; --row-alt:#F8F8F5;
+  --gold:#F1B300; --gold-ink:#7A5A00; --on-gold:#191919; --hatch:rgba(241,179,0,.30); --works:rgba(241,179,0,.10);
+  --band:#191919; --band-ink:#FFFFFF; --band-muted:#B9B9B3;
+  --no-bg:#E2E2DD; --no-ink:#4E4E49; --warn:#9A3B12;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#121212; --surface:#1B1B1B; --ink:#F0F0EC; --muted:#A6A6A0; --line:#34342F; --row-alt:#202020;
+    --gold-ink:#F1B300; --hatch:rgba(241,179,0,.24); --works:rgba(241,179,0,.08);
+    --band:#0A0A0A; --band-muted:#A6A6A0;
+    --no-bg:#2C2C2A; --no-ink:#B4B4AE; --warn:#F08A5D;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;-webkit-text-size-adjust:100%}
+.wrap{max-width:1080px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* Masthead */
+.mast{background:var(--band);color:var(--band-ink);border-bottom:5px solid var(--gold)}
+.mast .wrap{padding-block:28px 24px;display:flex;flex-wrap:wrap;gap:16px 32px;align-items:flex-end;justify-content:space-between}
+.mast-text{min-width:0;max-width:640px;display:flex;flex-direction:column;gap:6px}
+.eyebrow{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
+h1{margin:0;font-family:var(--display);font-weight:700;font-size:clamp(30px,5vw,44px);line-height:1.02;text-transform:uppercase;letter-spacing:.01em;text-wrap:balance}
+.lede{margin:4px 0 0;color:var(--band-muted);font-size:14.5px;max-width:62ch}
+.lede strong{color:var(--band-ink);font-weight:600}
+.status{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--band-ink);border:1px solid #3A3A36;border-radius:999px;padding:6px 12px;white-space:nowrap}
+.status .dot{width:8px;height:8px;border-radius:50%;background:var(--band-muted)}
+.status[data-s="live"] .dot{background:#5CC472}
+.status[data-s="warn"] .dot{background:var(--gold)}
+.status[data-s="off"] .dot{background:#E0603A}
+
+main.wrap{padding-block:24px 48px;display:flex;flex-direction:column;gap:32px}
+.banner{border:1px solid var(--line);border-left:4px solid var(--warn);background:var(--surface);padding:12px 14px;border-radius:6px;font-size:14px}
+.banner code{font-size:13px;background:var(--row-alt);padding:1px 5px;border-radius:3px}
+section{display:flex;flex-direction:column;gap:12px;min-width:0}
+h2{margin:0;font-family:var(--display);font-weight:700;font-size:24px;text-transform:uppercase;letter-spacing:.02em;line-height:1.1}
+.sub{margin:0;color:var(--muted);font-size:14px;max-width:70ch}
+.sec-head{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;justify-content:space-between}
+
+/* Legend */
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:13px;color:var(--muted)}
+.legend .chip{width:auto;min-width:0;height:26px;padding:0 10px;cursor:default;font-size:12px}
+
+/* Best fits */
+.best{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.fit{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.fit.works{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+.fit .when{font-family:var(--display);font-weight:700;font-size:22px;line-height:1.05;text-transform:uppercase}
+.fit .when span{display:block;font-size:15px;color:var(--muted);letter-spacing:.04em}
+.fit .meta{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.fit .tag{align-self:flex-start;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:4px;background:var(--gold);color:var(--on-gold)}
+.fit .tag.partial{background:transparent;color:var(--muted);border:1px solid var(--line)}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:8px;padding:16px;color:var(--muted);font-size:14px}
+
+/* Grid */
+.scroller{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:separate;border-spacing:0;width:100%}
+.avail{min-width:660px}
+th,td{padding:6px 8px;text-align:center;vertical-align:middle;border-bottom:1px solid var(--line)}
+tr:last-child>th,tr:last-child>td{border-bottom:0}
+thead th{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-block:10px;background:var(--surface)}
+thead th .who{display:block;font-family:var(--display);font-size:19px;letter-spacing:.03em;color:var(--ink)}
+thead th .prog{display:block;font-weight:500;letter-spacing:0;text-transform:none;font-variant-numeric:tabular-nums}
+.time{position:sticky;left:0;z-index:1;background:var(--surface);text-align:left;white-space:nowrap;font-weight:600;font-size:14px;font-variant-numeric:tabular-nums;border-right:1px solid var(--line);min-width:118px}
+tbody tr.slot:nth-of-type(even) td, tbody tr.slot:nth-of-type(even) th.time{background:var(--row-alt)}
+tbody tr.slot.works td, tbody tr.slot.works th.time{background:var(--works)}
+tbody tr.slot.works th.time{box-shadow:inset 4px 0 0 var(--gold)}
+tr.day th{background:var(--band);color:var(--band-ink);font-family:var(--display);font-size:17px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;text-align:left;padding-block:8px}
+tr.day td{background:var(--band);padding-block:6px}
+tr.day th.time{background:var(--band);border-right-color:#33332F}
+.allno{background:transparent;border:1px solid #4A4A45;color:var(--band-muted);border-radius:4px;font-size:11.5px;font-weight:600;padding:3px 8px;cursor:pointer;white-space:nowrap}
+.allno:hover:not(:disabled){border-color:var(--gold);color:var(--band-ink)}
+.allno:disabled{opacity:.4;cursor:not-allowed}
+
+.chip{width:100%;min-width:86px;height:34px;border-radius:6px;border:1.5px solid transparent;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:4px;transition:transform .08s ease,background-color .12s ease}
+.chip:active:not(:disabled){transform:scale(.96)}
+.chip:disabled{cursor:not-allowed;opacity:.65}
+.s-yes{background:var(--gold);border-color:var(--gold);color:var(--on-gold)}
+.s-inb{background:repeating-linear-gradient(135deg,var(--hatch) 0 5px,transparent 5px 10px);border-color:var(--gold);color:var(--ink)}
+.s-no{background:var(--no-bg);border-color:var(--no-bg);color:var(--no-ink)}
+.s-none{background:transparent;border:1.5px dashed var(--line);color:var(--muted);font-weight:500}
+.chip.s-none:hover:not(:disabled){border-color:var(--gold-ink);color:var(--ink)}
+
+.team{display:flex;align-items:center;gap:8px;justify-content:flex-start;min-width:120px}
+.pips{display:inline-flex;gap:3px}
+.pip{width:10px;height:18px;border-radius:2px;border:1px solid transparent}
+.pip.s-none{border:1px dashed var(--line)}
+.verdict{font-size:12.5px;font-weight:600;white-space:nowrap}
+.verdict.works{color:var(--gold-ink)}
+.verdict.blocked{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line)}
+.verdict.waiting{color:var(--muted)}
+
+/* Weeks */
+.weeks{min-width:560px}
+.weeks th.time{min-width:200px;white-space:normal}
+.tick{width:34px;height:34px;border-radius:6px;border:1.5px dashed var(--line);background:transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted)}
+.tick[aria-pressed="true"]{background:var(--gold);border:1.5px solid var(--gold);color:var(--on-gold)}
+.tick:disabled{cursor:not-allowed;opacity:.65}
+.count{font-variant-numeric:tabular-nums;font-weight:700;color:var(--muted)}
+.count.has{color:var(--gold-ink)}
+
+/* Notes */
+.notes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.note{display:flex;flex-direction:column;gap:6px;min-width:0}
+.note label{font-family:var(--display);font-weight:700;font-size:18px;text-transform:uppercase;letter-spacing:.03em}
+.note textarea{width:100%;min-height:84px;resize:vertical;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;padding:10px 12px}
+.note textarea:focus{outline:2px solid var(--gold);outline-offset:0;border-color:var(--gold)}
+.note .saved{font-size:12px;color:var(--muted);min-height:1.2em}
+@media (max-width:640px){.notes{grid-template-columns:1fr}}
+
+footer.wrap{padding-block:0 32px;color:var(--muted);font-size:12.5px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="wrap">
+    <div class="mast-text">
+      <div class="eyebrow">University of Idaho · PEAK Toolkit</div>
+      <h1>Monthly Meeting Availability</h1>
+      <p class="lede">Monthly check-ins with NACUBO and WICHE staff, now through August 2027. Mark each slot for yourself; Ben will submit the team's answer. <strong>WICHE form due Friday, November 6.</strong> All times Mountain.</p>
+    </div>
+    <div class="status" id="status" data-s="wait" role="status"><span class="dot"></span><span id="statusText">Connecting…</span></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="banner" id="banner" hidden></div>
+
+  <section aria-labelledby="bestH">
+    <div class="sec-head">
+      <h2 id="bestH">Best fits so far</h2>
+      <p class="sub">Slots where nobody has said No, ranked by how many people answered and said Yes.</p>
+    </div>
+    <div id="best"></div>
+  </section>
+
+  <section aria-labelledby="gridH">
+    <div class="sec-head">
+      <h2 id="gridH">Availability by time slot</h2>
+      <div class="legend">
+        <span>Click a cell to cycle:</span>
+        <span class="chip s-none">Not set</span>
+        <span class="chip s-yes">Yes</span>
+        <span class="chip s-inb">If need be</span>
+        <span class="chip s-no">No</span>
+      </div>
+    </div>
+    <div class="scroller"><table class="avail" id="avail"></table></div>
+  </section>
+
+  <section aria-labelledby="weeksH">
+    <div class="sec-head">
+      <h2 id="weeksH">Preferred week of the month</h2>
+      <p class="sub">Optional. The WICHE form allows up to three choices for the team.</p>
+    </div>
+    <div class="scroller"><table class="weeks" id="weeks"></table></div>
+  </section>
+
+  <section aria-labelledby="notesH">
+    <div class="sec-head">
+      <h2 id="notesH">Considerations</h2>
+      <p class="sub">Anything WICHE should know when scheduling (standing conflicts, travel, a delegate who can attend).</p>
+    </div>
+    <div class="notes" id="notes"></div>
+  </section>
+</main>
+<footer class="wrap">Changes save automatically and appear for everyone with this page open. Anyone with the link can change any cell.</footer>
+
+<script>
+(function(){
+  const PEOPLE=[{id:"barrie",name:"Barrie"},{id:"kim",name:"Kim"},{id:"dan",name:"Dan"},{id:"ben",name:"Ben"}];
+  const DAYS=[
+    {id:"mon",name:"Monday",hours:[8,9,10,11,12,13,14,15,16]},
+    {id:"tue",name:"Tuesday",hours:[8,9,10,11,12,13,14,15,16]},
+    {id:"thu",name:"Thursday",hours:[8,9]},
+    {id:"fri",name:"Friday",hours:[8,9]}
+  ];
+  const WEEKS=[
+    {id:"first",label:"First instance of the month"},
+    {id:"second",label:"Second instance"},
+    {id:"third",label:"Third instance"},
+    {id:"fourth",label:"Fourth instance"},
+    {id:"any",label:"Doesn't matter which week"}
+  ];
+  const CYCLE=[null,"yes","inb","no"];
+  const WORD={yes:"Yes",inb:"If need be",no:"No"};
+  const ROOT="peak"; // top-level key in the database
+
+  const h12=h=>((h+11)%12)+1, ap=h=>h<12?"am":"pm";
+  const timeLabel=h=>ap(h)===ap(h+1)?`${h12(h)}–${h12(h+1)} ${ap(h)}`:`${h12(h)} ${ap(h)}–${h12(h+1)} ${ap(h+1)}`;
+  const SLOTS=[];
+  DAYS.forEach(d=>d.hours.forEach(h=>SLOTS.push({id:`${d.id}_${String(h).padStart(2,"0")}`,day:d,h,label:timeLabel(h)})));
+
+  const DB=(DATABASE_URL||"").trim().replace(/\/+$/,"");
+  let tree={};            // raw copy of /peak from the database
+  let data={};            // normalized per-person view of tree
+  let connected=false, failed=false, pending=0, pollTimer=null;
+  const noteDirty={}, noteTimers={};
+
+  const $=s=>document.querySelector(s);
+  const el=(tag,attrs={},kids=[])=>{const e=document.createElement(tag);for(const k in attrs){if(k==="text")e.textContent=attrs[k];else if(k==="class")e.className=attrs[k];else e.setAttribute(k,attrs[k]);}kids.forEach(c=>e.appendChild(c));return e;};
+  function setStatus(s,t){$("#status").dataset.s=s;$("#statusText").textContent=t;}
+  function banner(html){const b=$("#banner");if(!html){b.hidden=true;return;}b.innerHTML=html;b.hidden=false;}
+  const editable=()=>!!DB&&connected&&!failed;
+
+  /* ---------- build static structure ---------- */
+  function build(){
+    const t=$("#avail");
+    t.appendChild(el("thead",{},[el("tr",{},[
+      el("th",{class:"time",scope:"col",text:"Time (MT)"}),
+      ...PEOPLE.map(p=>el("th",{scope:"col"},[el("span",{class:"who",text:p.name}),el("span",{class:"prog","data-prog":p.id,text:"0 of "+SLOTS.length})])),
+      el("th",{scope:"col",text:"Team"})
+    ])]));
+    const body=el("tbody");
+    DAYS.forEach(d=>{
+      body.appendChild(el("tr",{class:"day"},[
+        el("th",{class:"time",scope:"rowgroup",text:d.name}),
+        ...PEOPLE.map(p=>el("td",{},[el("button",{class:"allno",type:"button","data-allno":p.id+"|"+d.id,title:`Mark every ${d.name} slot No for ${p.name}`,text:"All No"})])),
+        el("td")
+      ]));
+      d.hours.forEach(h=>{
+        const sid=`${d.id}_${String(h).padStart(2,"0")}`;
+        body.appendChild(el("tr",{class:"slot","data-row":sid},[
+          el("th",{class:"time",scope:"row",text:timeLabel(h)}),
+          ...PEOPLE.map(p=>el("td",{},[el("button",{class:"chip s-none",type:"button","data-cell":p.id+"|"+sid,text:"·"})])),
+          el("td",{},[el("div",{class:"team"},[el("span",{class:"pips","data-pips":sid}),el("span",{class:"verdict waiting","data-verdict":sid,text:"Waiting"})])])
+        ]));
+      });
+    });
+    t.appendChild(body);
+    body.querySelectorAll(".pips").forEach(s=>PEOPLE.forEach(()=>s.appendChild(el("span",{class:"pip s-none"}))));
+
+    const w=$("#weeks");
+    w.appendChild(el("thead",{},[el("tr",{},[
+      el("th",{class:"time",scope:"col",text:"Week"}),
+      ...PEOPLE.map(p=>el("th",{scope:"col"},[el("span",{class:"who",text:p.name})])),
+      el("th",{scope:"col",text:"Votes"})
+    ])]));
+    const wb=el("tbody");
+    WEEKS.forEach(wk=>wb.appendChild(el("tr",{},[
+      el("th",{class:"time",scope:"row",text:wk.label}),
+      ...PEOPLE.map(p=>el("td",{},[el("button",{class:"tick",type:"button","aria-pressed":"false","data-week":p.id+"|"+wk.id,"aria-label":`${p.name}: ${wk.label}`})])),
+      el("td",{},[el("span",{class:"count","data-wcount":wk.id,text:"0"})])
+    ])));
+    w.appendChild(wb);
+
+    const n=$("#notes");
+    PEOPLE.forEach(p=>{
+      n.appendChild(el("div",{class:"note"},[
+        el("label",{for:"note-"+p.id,text:p.name}),
+        el("textarea",{id:"note-"+p.id,"data-note":p.id,placeholder:`Notes from ${p.name}`}),
+        el("div",{class:"saved","data-saved":p.id})
+      ]));
+    });
+  }
+
+  /* ---------- state ---------- */
+  function normalize(){
+    const people=(tree&&tree.people)||{};
+    const out={};
+    PEOPLE.forEach(p=>{
+      const d=people[p.id]||{};const o={slots:{},weeks:{},note:""};
+      if(d.slots&&typeof d.slots==="object")for(const k in d.slots){const v=d.slots[k];if(v==="yes"||v==="inb"||v==="no")o.slots[k]=v;}
+      if(d.weeks&&typeof d.weeks==="object")for(const k in d.weeks)if(d.weeks[k]===true)o.weeks[k]=true;
+      if(typeof d.note==="string")o.note=d.note;
+      if(noteDirty[p.id]&&data[p.id])o.note=data[p.id].note;
+      out[p.id]=o;
+    });
+    data=out;
+  }
+  function setPath(parts,value){
+    if(!parts.length){tree=(value&&typeof value==="object")?value:{};return;}
+    let o=tree;
+    for(let i=0;i<parts.length-1;i++){
+      if(!o[parts[i]]||typeof o[parts[i]]!=="object"){if(value===null)return;o[parts[i]]={};}
+      o=o[parts[i]];
+    }
+    const last=parts[parts.length-1];
+    if(value===null)delete o[last];else o[last]=value;
+  }
+  function apply(path,value,merge){
+    const parts=String(path||"/").split("/").filter(Boolean);
+    if(merge&&value&&typeof value==="object"){for(const k in value)setPath(parts.concat(k),value[k]);}
+    else setPath(parts,value);
+  }
+
+  /* ---------- render ---------- */
+  function tally(sid){
+    let yes=0,inb=0,no=0;
+    PEOPLE.forEach(p=>{const v=data[p.id].slots[sid];if(v==="yes")yes++;else if(v==="inb")inb++;else if(v==="no")no++;});
+    const answered=yes+inb+no;
+    return {yes,inb,no,answered,state:no>0?"blocked":answered===PEOPLE.length?"works":"waiting"};
+  }
+  function render(){
+    normalize();
+    const can=editable();
+    document.querySelectorAll("[data-cell]").forEach(b=>{
+      const [pid,sid]=b.dataset.cell.split("|");const v=data[pid].slots[sid]||null;
+      b.className="chip s-"+(v||"none");b.textContent=v?WORD[v]:"·";b.disabled=!can;
+      const slot=SLOTS.find(s=>s.id===sid);
+      b.setAttribute("aria-label",`${PEOPLE.find(p=>p.id===pid).name}, ${slot.day.name} ${slot.label}: ${v?WORD[v]:"not set"}`);
+    });
+    document.querySelectorAll("[data-allno]").forEach(b=>{b.disabled=!can;});
+    PEOPLE.forEach(p=>{
+      const n=SLOTS.filter(s=>data[p.id].slots[s.id]).length;
+      $(`[data-prog="${p.id}"]`).textContent=`${n} of ${SLOTS.length}`;
+    });
+    SLOTS.forEach(s=>{
+      const t=tally(s.id);
+      $(`[data-row="${s.id}"]`).classList.toggle("works",t.state==="works");
+      const pips=$(`[data-pips="${s.id}"]`).children;
+      PEOPLE.forEach((p,i)=>{const v=data[p.id].slots[s.id];pips[i].className="pip s-"+(v||"none");pips[i].title=`${p.name}: ${v?WORD[v]:"not set"}`;});
+      const v=$(`[data-verdict="${s.id}"]`);
+      v.className="verdict "+t.state;
+      v.textContent=t.state==="works"?(t.yes===PEOPLE.length?"All Yes":`Works (${t.yes} Yes)`):t.state==="blocked"?`${t.no} No`:`${t.answered} of ${PEOPLE.length} in`;
+    });
+    document.querySelectorAll("[data-week]").forEach(b=>{
+      const [pid,wk]=b.dataset.week.split("|");const on=!!data[pid].weeks[wk];
+      b.setAttribute("aria-pressed",on?"true":"false");b.textContent=on?"✓":"";b.disabled=!can;
+    });
+    WEEKS.forEach(wk=>{
+      const c=PEOPLE.filter(p=>data[p.id].weeks[wk.id]).length;
+      const e=$(`[data-wcount="${wk.id}"]`);e.textContent=c;e.className="count"+(c?" has":"");
+    });
+    PEOPLE.forEach(p=>{
+      const ta=$(`[data-note="${p.id}"]`);ta.disabled=!can;
+      if(document.activeElement!==ta&&!noteDirty[p.id]&&ta.value!==data[p.id].note)ta.value=data[p.id].note;
+    });
+    renderBest();
+  }
+  function renderBest(){
+    const box=$("#best");box.textContent="";
+    const ranked=SLOTS.map(s=>({s,t:tally(s.id)})).filter(x=>x.t.no===0&&x.t.answered>0)
+      .sort((a,b)=>b.t.answered-a.t.answered||b.t.yes-a.t.yes);
+    if(!ranked.length){
+      box.appendChild(el("div",{class:"empty",text:"No open slots yet. As people fill in the grid, slots where nobody has said No will show up here."}));
+      return;
+    }
+    const grid=el("div",{class:"best"});
+    ranked.slice(0,4).forEach(({s,t})=>{
+      const works=t.state==="works";
+      const parts=[];if(t.yes)parts.push(`${t.yes} Yes`);if(t.inb)parts.push(`${t.inb} If need be`);
+      grid.appendChild(el("div",{class:"fit"+(works?" works":"")},[
+        el("span",{class:"tag"+(works?"":" partial"),text:works?"Works for all":`${t.answered} of ${PEOPLE.length} answered`}),
+        el("div",{class:"when"},[document.createTextNode(s.day.name),el("span",{text:s.label+" MT"})]),
+        el("div",{class:"meta",text:parts.join(" · ")})
+      ]));
+    });
+    box.appendChild(grid);
+  }
+
+  /* ---------- database (Firebase Realtime Database REST API) ---------- */
+  const url=path=>`${DB}/${ROOT}${path?"/"+path:""}.json`;
+  const queues={};
+  function send(pid,method,path,body){
+    pending++;
+    queues[pid]=(queues[pid]||Promise.resolve()).then(async()=>{
+      const r=await fetch(url(path),{method,headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      if(!r.ok)throw Object.assign(new Error("HTTP "+r.status),{status:r.status});
+    }).catch(writeError).finally(()=>{pending--;});
+    return queues[pid];
+  }
+  function writeError(e){
+    if(e&&(e.status===401||e.status===403)){
+      failed=true;setStatus("off","Not saving");
+      banner("The database refused the change. Its test-mode access may have expired; in the Firebase console, open Realtime Database &gt; Rules and extend the date.");
+      render();
+    }else{
+      banner("A change didn't save. Check your connection and try again.");
+    }
+  }
+
+  function startStream(){
+    if(typeof EventSource==="undefined"){startPolling();return;}
+    let es;
+    try{es=new EventSource(url(""));}catch(e){startPolling();return;}
+    const onEvent=merge=>ev=>{
+      try{const m=JSON.parse(ev.data);apply(m.path,m.data,merge);}catch(e){return;}
+      if(!connected){connected=true;banner("");}
+      setStatus("live","Live · saves for everyone");
+      render();
+    };
+    es.addEventListener("put",onEvent(false));
+    es.addEventListener("patch",onEvent(true));
+    es.addEventListener("cancel",()=>{
+      es.close();failed=true;setStatus("off","No access");
+      banner("The database is refusing reads. Its test-mode access may have expired; in the Firebase console, open Realtime Database &gt; Rules and extend the date.");
+      render();
+    });
+    es.onerror=()=>{
+      if(es.readyState===EventSource.CLOSED){startPolling();}
+      else if(connected){setStatus("warn","Reconnecting…");}
+    };
+    setTimeout(()=>{if(!connected){es.close();startPolling();}},10000);
+  }
+  async function poll(){
+    try{
+      const r=await fetch(url(""),{cache:"no-store"});
+      if(r.status===401||r.status===403){failed=true;setStatus("off","No access");banner("The database is refusing reads. Check its Rules in the Firebase console.");render();return;}
+      if(!r.ok)throw new Error();
+      const json=await r.json();
+      if(pending===0){tree=(json&&typeof json==="object")?json:{};}
+      connected=true;banner("");setStatus("live","Updating every 15 s");render();
+    }catch(e){
+      setStatus("warn","Can't reach saved responses");
+      if(!connected)banner("Can't reach the database. Check that <code>DATABASE_URL</code> is the Realtime Database URL from the Firebase console.");
+    }
+  }
+  function startPolling(){if(pollTimer)return;poll();pollTimer=setInterval(poll,15000);}
+
+  /* ---------- interactions ---------- */
+  document.addEventListener("click",ev=>{
+    if(!editable())return;
+    const cell=ev.target.closest("[data-cell]");
+    if(cell){
+      const [pid,sid]=cell.dataset.cell.split("|");
+      const next=CYCLE[(CYCLE.indexOf(data[pid].slots[sid]||null)+1)%CYCLE.length];
+      setPath(["people",pid,"slots",sid],next);render();
+      send(pid,"PATCH",`people/${pid}/slots`,{[sid]:next});
+      return;
+    }
+    const all=ev.target.closest("[data-allno]");
+    if(all){
+      const [pid,did]=all.dataset.allno.split("|");const patch={};
+      SLOTS.filter(s=>s.day.id===did).forEach(s=>{patch[s.id]="no";setPath(["people",pid,"slots",s.id],"no");});
+      render();send(pid,"PATCH",`people/${pid}/slots`,patch);
+      return;
+    }
+    const wk=ev.target.closest("[data-week]");
+    if(wk){
+      const [pid,w]=wk.dataset.week.split("|");
+      const next=data[pid].weeks[w]?null:true;
+      setPath(["people",pid,"weeks",w],next);render();
+      send(pid,"PATCH",`people/${pid}/weeks`,{[w]:next});
+    }
+  });
+  function flushNote(pid){
+    clearTimeout(noteTimers[pid]);
+    if(!noteDirty[pid])return;
+    const text=data[pid].note;const saved=$(`[data-saved="${pid}"]`);
+    saved.textContent="Saving…";
+    setPath(["people",pid,"note"],text);
+    send(pid,"PUT",`people/${pid}/note`,text).then(()=>{
+      if(data[pid].note===text){noteDirty[pid]=false;saved.textContent="Saved";}
+    });
+  }
+  document.addEventListener("input",ev=>{
+    const ta=ev.target.closest&&ev.target.closest("[data-note]");if(!ta||!editable())return;
+    const pid=ta.dataset.note;data[pid].note=ta.value;noteDirty[pid]=true;
+    $(`[data-saved="${pid}"]`).textContent="Editing…";
+    clearTimeout(noteTimers[pid]);noteTimers[pid]=setTimeout(()=>flushNote(pid),900);
+  });
+  document.addEventListener("focusout",ev=>{const ta=ev.target.closest&&ev.target.closest("[data-note]");if(ta)flushNote(ta.dataset.note);});
+
+  /* ---------- start ---------- */
+  build();render();
+  if(!DB){
+    setStatus("off","Not set up");
+    banner("This page isn't connected to a database yet. Paste your Firebase Realtime Database URL into <code>DATABASE_URL</code> near the top of index.html (setup steps are in the comment above it).");
+  }else{
+    startStream();
+  }
+})();
+</script>
+</body>
+</html>
